@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Secrets — NEVER commit these
+.env
+*.json
+!requirements.txt
+prod_bot_data.db
+*.db
+
+# Vercel
+.vercel/
+
+# Logs
+*.log

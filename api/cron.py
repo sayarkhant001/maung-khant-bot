@@ -1,0 +1,205 @@
+"""
+Vercel Cron Job — runs daily at 3:00 AM UTC (9:30 AM Myanmar time).
+Tasks:
+  1. Expire old unsubmitted orders
+  2. Send expiry reminders to subscribers (5d, 3d, 1d, 0d)
+  3. Send 41/42-day manual renewal alerts to admin
+     (41 days for plans >= 90 days, 42 days for shorter plans)
+"""
+import json
+import os
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler
+
+import telebot
+
+# ─── Bootstrap ────────────────────────────────────────────────────────────────
+# Must import config before sheets to load env vars
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from lib import config, sheets
+from lib.messages import EXPIRY_REMINDER, EXPIRY_REMINDER_0, MANUAL_RENEWAL_REMINDER
+
+bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode=None)
+
+CRON_SECRET = os.getenv("CRON_SECRET", "")  # optional security header
+
+
+class handler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        # Vercel cron calls GET /api/cron
+        secret = self.headers.get("x-cron-secret", "")
+        if CRON_SECRET and secret != CRON_SECRET:
+            self._respond(401, {"error": "Unauthorized"})
+            return
+
+        results = run_cron()
+        self._respond(200, results)
+
+    def _respond(self, status, data):
+        body = json.dumps(data).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass  # suppress default logging
+
+
+def run_cron() -> dict:
+    results = {
+        "expired_orders": 0,
+        "expiry_reminders_sent": 0,
+        "manual_renewal_alerts": 0,
+        "errors": [],
+    }
+
+    # ── 1. Expire old pending orders ──────────────────────────────────────────
+    try:
+        sheets.expire_old_orders()
+        results["expired_orders"] = 1  # just marks done
+    except Exception as e:
+        results["errors"].append(f"expire_orders: {e}")
+
+    # ── 2. Subscription expiry reminders to users ─────────────────────────────
+    try:
+        subs = sheets.get_all_active_subscriptions()
+        now = datetime.utcnow()
+
+        for sub in subs:
+            try:
+                expiry_str = sub.get("expiry_date", "")
+                if not expiry_str:
+                    continue
+                exp = datetime.strptime(str(expiry_str)[:19], "%Y-%m-%d %H:%M:%S")
+                days_left = (exp - now).days
+                chat_id = int(sub.get("chat_id") or sub.get("user_id"))
+                sub_id = sub.get("id", "")
+                product = sub.get("product_type", "subscription")
+
+                # Check which reminder to send
+                sent = False
+
+                if days_left == 0 and str(sub.get("reminder_0day_sent", "")).upper() != "TRUE":
+                    bot.send_message(
+                        chat_id,
+                        EXPIRY_REMINDER_0.format(product=product),
+                        parse_mode="Markdown",
+                    )
+                    sheets.update_subscription(sub_id, reminder_0day_sent="TRUE")
+                    # Deactivate if fully expired
+                    sheets.expire_subscription(sub_id)
+                    sheets.deactivate_manual_renewal(sub_id)
+                    sent = True
+
+                elif days_left in (1,) and str(sub.get("reminder_1day_sent", "")).upper() != "TRUE":
+                    bot.send_message(
+                        chat_id,
+                        EXPIRY_REMINDER.format(product=product, days=days_left),
+                        parse_mode="Markdown",
+                    )
+                    sheets.update_subscription(sub_id, reminder_1day_sent="TRUE")
+                    sent = True
+
+                elif days_left in (3,) and str(sub.get("reminder_3day_sent", "")).upper() != "TRUE":
+                    bot.send_message(
+                        chat_id,
+                        EXPIRY_REMINDER.format(product=product, days=days_left),
+                        parse_mode="Markdown",
+                    )
+                    sheets.update_subscription(sub_id, reminder_3day_sent="TRUE")
+                    sent = True
+
+                # Also send 5-day reminder (reuse 3day field as 5day flag is not separate)
+                elif days_left == 5 and str(sub.get("reminder_3day_sent", "")).upper() != "TRUE":
+                    bot.send_message(
+                        chat_id,
+                        EXPIRY_REMINDER.format(product=product, days=days_left),
+                        parse_mode="Markdown",
+                    )
+                    sent = True
+
+                if sent:
+                    results["expiry_reminders_sent"] += 1
+
+            except Exception as e:
+                results["errors"].append(f"reminder sub {sub.get('id')}: {e}")
+
+    except Exception as e:
+        results["errors"].append(f"expiry_reminders: {e}")
+
+    # ── 3. 42-day manual renewal alerts to ADMIN ──────────────────────────────
+    try:
+        due = sheets.get_manual_renewals_due()
+
+        for r in due:
+            sub_id = r.get("sub_id", "")
+            user_id = r.get("user_id", "")
+            username = r.get("username", "N/A")
+            product = r.get("product_type", "")
+            plan = r.get("plan_name", "")
+            expiry_str = str(r.get("expiry_date", ""))[:10]
+
+            # Calculate days left until expiry
+            try:
+                exp_dt = datetime.strptime(expiry_str, "%Y-%m-%d")
+                days_left = (exp_dt - datetime.utcnow()).days
+            except Exception:
+                days_left = "?"
+
+            # Send alert to ADMIN (not to user)
+            from lib.bot_helpers import admin_main_keyboard
+            markup = telebot.types.InlineKeyboardMarkup()
+            markup.add(
+                telebot.types.InlineKeyboardButton(
+                    "✅ Mark as Renewed",
+                    callback_data=f"admin_renewed_{sub_id}"
+                )
+            )
+            markup.add(
+                telebot.types.InlineKeyboardButton(
+                    "🔕 Stop Reminders",
+                    callback_data=f"admin_stop_renewal_{sub_id}"
+                )
+            )
+
+            bot.send_message(
+                config.ADMIN_ID,
+                MANUAL_RENEWAL_REMINDER.format(
+                    username=username,
+                    user_id=user_id,
+                    product=product,
+                    plan_name=plan,
+                    sub_id=sub_id,
+                    expiry=expiry_str,
+                    days_left=days_left,
+                ),
+                parse_mode="Markdown",
+                reply_markup=markup,
+            )
+
+            # Look up plan_days so the next interval is correct (41d long / 42d short)
+            plan_days = 0
+            try:
+                plan_name = r.get("plan_name", "")
+                product = str(r.get("product_type", "")).lower()
+                plan_sheet = "zoom_plans" if "zoom" in product else "canva_plans"
+                plans = sheets._sheet_to_dicts(sheets.get_sheet(plan_sheet))
+                match = next((p for p in plans if p.get("name") == plan_name), None)
+                if match:
+                    plan_days = int(float(match.get("days", 0) or 0))
+            except Exception:
+                plan_days = 0
+
+            # Push next reminder forward (41d if long plan, 42d if short)
+            sheets.mark_manual_renewal_reminded(sub_id, plan_days=plan_days)
+            results["manual_renewal_alerts"] += 1
+
+    except Exception as e:
+        results["errors"].append(f"manual_renewals: {e}")
+
+    return results
