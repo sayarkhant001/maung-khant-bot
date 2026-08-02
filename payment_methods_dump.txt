@@ -1,0 +1,21 @@
+ID: 1
+Name: KBZ Pay
+Account: 09981059064
+Account Name: Daw Aye Aye Myint
+Icon: 💳
+Note: Note မှာ Shop/ Payment အဆင်ပြေရာ ရေးနိုင်ပါတယ်ခင်ဗျ။ Zoom တို့ VPN တို့မရေးပါနဲ့ခင်ဗျာ။
+----------------------------------------
+ID: 2
+Name: WavePay
+Account: 09941197735
+Account Name: Ko Khant
+Icon: 💰
+Note: Note မှာ အဆင်ပြေတာရေးနိုင်ပါတယ်။ VPN, Zoom စသဖြင့်စကားလုံးလေးတွေကိုတော့ မသုံးပါနဲ့ခင်ဗျ။
+----------------------------------------
+ID: 3
+Name: AYA Pay
+Account: 09xxxxxxxxx
+Account Name: None
+Icon: 🏦
+Note: None
+----------------------------------------

@@ -48,13 +48,13 @@ def fmt(val) -> str:
 
 def import_users(conn: sqlite3.Connection, dry_run: bool) -> int:
     cursor = conn.execute("""
-        SELECT id as user_id,
+        SELECT chat_id as user_id,
                username,
                first_name,
-               id as chat_id,
+               chat_id,
                created_at as joined_at,
                created_at as last_active,
-               is_blocked
+               is_banned as is_blocked
         FROM users
     """)
     rows = []
@@ -85,30 +85,25 @@ def import_subscriptions(conn: sqlite3.Connection, dry_run: bool,
                           only_active: bool, mark_renewals: bool) -> int:
     query = """
         SELECT s.id,
-               s.user_id,
+               s.chat_id as user_id,
                s.product_type,
                s.status,
                s.expiry_date,
-               s.key_or_link,
+               s.license_key as key_or_link,
                s.email,
-               s.data_limit_gb,
-               s.data_used_gb,
-               s.created_at,
+               0 as data_limit_gb,
+               0 as data_used_gb,
+               s.purchase_date as created_at,
                -- Try to get plan name from related tables
                COALESCE(
-                   (SELECT op.days || 'D-' || op.data_limit_gb || 'GB'
-                    FROM outline_keys ok
-                    JOIN outline_plans op ON ok.plan_id = op.id
-                    WHERE ok.subscription_id = s.id LIMIT 1),
-                   (SELECT zp.days || ' Day Zoom'
-                    FROM zoom_plans zp
-                    WHERE zp.id IN (
-                        SELECT o.plan_id FROM orders o WHERE o.subscription_id = s.id LIMIT 1
-                    ) LIMIT 1),
+                   (SELECT zp.name FROM zoom_plans zp WHERE zp.id IN (SELECT o.plan_id FROM orders o WHERE o.subscription_id = s.id LIMIT 1) LIMIT 1),
+                   (SELECT cp.name FROM canva_plans cp WHERE cp.id IN (SELECT o.plan_id FROM orders o WHERE o.subscription_id = s.id LIMIT 1) LIMIT 1),
+                   (SELECT vp.days || 'D ' || vp.data_limit_gb || 'GB' FROM vless_plans vp WHERE vp.id IN (SELECT o.plan_id FROM orders o WHERE o.subscription_id = s.id LIMIT 1) LIMIT 1),
+                   (SELECT hp.days || 'D ' || hp.data_limit_gb || 'GB' FROM hiddify_plans hp WHERE hp.id IN (SELECT o.plan_id FROM orders o WHERE o.subscription_id = s.id LIMIT 1) LIMIT 1),
                    s.product_type
                ) as plan_name,
                -- Get username from users table
-               (SELECT u.username FROM users u WHERE u.id = s.user_id LIMIT 1) as username
+               (SELECT u.username FROM users u WHERE u.chat_id = s.chat_id LIMIT 1) as username
         FROM subscriptions s
     """
     if only_active:
@@ -123,6 +118,7 @@ def import_subscriptions(conn: sqlite3.Connection, dry_run: bool,
             "id": fmt(r["id"]),
             "user_id": r["user_id"],
             "chat_id": r["user_id"],  # chat_id = user_id for private chats
+            "username": fmt(r["username"]),
             "product_type": fmt(r["product_type"]).upper(),
             "plan_name": fmt(r["plan_name"]),
             "expiry_date": fmt(r["expiry_date"]),

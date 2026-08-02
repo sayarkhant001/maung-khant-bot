@@ -202,5 +202,16 @@ def format_payment_methods(methods: List[Dict]) -> str:
     lines = []
     for m in methods:
         icon = m.get("icon", "💳")
-        lines.append(f"{icon} *{m['name']}*\nAccount: `{m['account_info']}`")
+        acc = m.get('account_info', '')
+        name = m.get('account_name', '')
+        note = m.get('note', '')
+        
+        block = f"{icon} *{m.get('name', 'Bank')}*\n"
+        if name:
+            block += f"👤 {name}\n"
+        block += f"🔢 `{acc}`\n"
+        if note:
+            block += f"📝 _{note}_\n"
+            
+        lines.append(block.strip())
     return "\n\n".join(lines)

@@ -31,8 +31,8 @@ def register(bot: telebot.TeleBot):
 
         for m in methods:
             icon = m.get("icon", "💳")
-            status = "✅" if str(m.get("status","")).lower() == "active" else "❌"
-            text += (f"{status} {icon} *{m.get('method_name','')}*\n"
+            status = "✅" if str(m.get("is_active","")).upper() == "TRUE" else "❌"
+            text += (f"{status} {icon} *{m.get('name','')}*\n"
                      f"   Account: `{m.get('account_info','')}`\n\n")
             markup.row(
                 types.InlineKeyboardButton(f"✏️ Edit",   callback_data=f"pm_edit_{m['id']}"),
@@ -93,10 +93,12 @@ def register(bot: telebot.TeleBot):
                 existing = sheets._sheet_to_dicts(ws)
                 new_id = str(max([int(p.get("id",0) or 0) for p in existing] + [0]) + 1)
                 row = {h: "" for h in headers}
-                row.update({"id": new_id, "method_name": data["method_name"],
-                             "method_type": "Mobile Wallet",
+                row.update({"id": new_id, "name": data["method_name"],
+                             "type": "Mobile Wallet",
                              "account_info": data["account_info"],
-                             "icon": "💳", "status": "active"})
+                             "account_name": data.get("account_name", ""),
+                             "note": data.get("note", ""),
+                             "icon": "💳", "is_active": "TRUE"})
                 ws.append_row([row[h] for h in headers])
                 bot.send_message(message.chat.id,
                     f"✅ *{data['method_name']}* added!\nAccount: `{data['account_info']}`",
@@ -118,15 +120,15 @@ def register(bot: telebot.TeleBot):
             bot.send_message(call.message.chat.id, "❌ Not found."); return
         markup = types.InlineKeyboardMarkup(row_width=1)
         markup.add(
-            types.InlineKeyboardButton("✏️ Method Name",   callback_data=f"pm_field_{method_id}_method_name"),
+            types.InlineKeyboardButton("✏️ Method Name",   callback_data=f"pm_field_{method_id}_name"),
             types.InlineKeyboardButton("💳 Account No.",   callback_data=f"pm_field_{method_id}_account_info"),
             types.InlineKeyboardButton("👤 Account Name",  callback_data=f"pm_field_{method_id}_account_name"),
             types.InlineKeyboardButton("🔄 Toggle Status", callback_data=f"pm_toggle_{method_id}"),
             types.InlineKeyboardButton("⬅️ Back",          callback_data="admin_payments"),
         )
-        status = "✅ Active" if str(m.get("status","")).lower() == "active" else "❌ Inactive"
+        status = "✅ Active" if str(m.get("is_active","")).upper() == "TRUE" else "❌ Inactive"
         bot.send_message(call.message.chat.id,
-            f"✏️ *Edit {m.get('method_name','')}*\n\n"
+            f"✏️ *Edit {m.get('name','')}*\n\n"
             f"Account: `{m.get('account_info','')}`\n"
             f"Status: {status}",
             parse_mode="Markdown", reply_markup=markup)
@@ -141,12 +143,13 @@ def register(bot: telebot.TeleBot):
         methods = sheets._sheet_to_dicts(ws)
         m = next((x for x in methods if str(x.get("id")) == method_id), None)
         if not m: return
-        new_status = "inactive" if str(m.get("status","")).lower() == "active" else "active"
+        new_is_active = "FALSE" if str(m.get("is_active","")).upper() == "TRUE" else "TRUE"
+        new_status_label = "Active" if new_is_active == "TRUE" else "Inactive"
         row_idx = sheets._find_row(ws, "id", method_id, headers)
-        col = headers.index("status") + 1
-        ws.update_cell(row_idx, col, new_status)
+        col = headers.index("is_active") + 1
+        ws.update_cell(row_idx, col, new_is_active)
         bot.send_message(call.message.chat.id,
-            f"✅ {m.get('method_name','')} → *{new_status}*", parse_mode="Markdown")
+            f"✅ {m.get('name','')} → *{new_status_label}*", parse_mode="Markdown")
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith("pm_field_"))
     def cb_pm_field(call: types.CallbackQuery):
@@ -157,7 +160,7 @@ def register(bot: telebot.TeleBot):
         method_id = raw[:idx]; field = raw[idx+1:]
         bot.answer_callback_query(call.id)
         _state[call.message.chat.id] = {"action": "edit_pm", "method_id": method_id, "field": field}
-        labels = {"method_name": "new method name", "account_info": "new account number",
+        labels = {"name": "new method name", "account_info": "new account number",
                   "account_name": "new account holder name"}
         bot.send_message(call.message.chat.id,
             f"Enter the {labels.get(field, field)}:",

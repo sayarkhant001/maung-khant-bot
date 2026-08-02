@@ -74,7 +74,7 @@ SHEET_SCHEMAS = {
         "admin_note", "verified_at", "subscription_id"
     ],
     "subscriptions": [
-        "id", "user_id", "chat_id", "product_type", "plan_name",
+        "id", "user_id", "chat_id", "username", "product_type", "plan_name",
         "expiry_date", "status", "key_or_link", "email",
         "data_limit_gb", "data_used_gb", "reminder_3day_sent",
         "reminder_1day_sent", "reminder_0day_sent", "created_at"
@@ -97,7 +97,7 @@ SHEET_SCHEMAS = {
         "id", "name", "days", "price", "buying_price", "status", "sort_order"
     ],
     "payment_methods": [
-        "id", "name", "type", "account_info", "icon", "is_active"
+        "id", "name", "type", "account_info", "account_name", "note", "icon", "is_active"
     ],
     "rate_limits": [
         "user_id", "last_request_at"
@@ -380,7 +380,7 @@ def expire_old_orders():
 def create_subscription(user_id: int, chat_id: int, product_type: str,
                         plan_name: str, days: int, key_or_link: str = "",
                         email: str = "", data_limit_gb: int = 0,
-                        order_id: str = "") -> Dict:
+                        order_id: str = "", username: str = "") -> Dict:
     ws = get_sheet("subscriptions")
     headers = SHEET_SCHEMAS["subscriptions"]
     sub_id = "SUB-" + _gen_id()
@@ -391,6 +391,7 @@ def create_subscription(user_id: int, chat_id: int, product_type: str,
         "id": sub_id,
         "user_id": user_id,
         "chat_id": chat_id,
+        "username": username,
         "product_type": product_type,
         "plan_name": plan_name,
         "expiry_date": expiry,
@@ -787,6 +788,7 @@ def bulk_import_subscriptions(rows: List[Dict]):
             "id": s.get("id", "SUB-" + _gen_id()),
             "user_id": s.get("user_id", ""),
             "chat_id": s.get("chat_id") or s.get("user_id", ""),
+            "username": s.get("username", ""),
             "product_type": s.get("product_type", ""),
             "plan_name": s.get("plan_name", ""),
             "expiry_date": s.get("expiry_date", ""),
