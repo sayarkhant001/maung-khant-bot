@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from lib import config, sheets
 from lib.messages import EXPIRY_REMINDER, EXPIRY_REMINDER_0, MANUAL_RENEWAL_REMINDER
 
-bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode=None)
+bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode=None, threaded=False)
 
 CRON_SECRET = os.getenv("CRON_SECRET", "")  # optional security header
 

@@ -21,7 +21,7 @@ _bot = None
 def get_bot() -> telebot.TeleBot:
     global _bot
     if _bot is None:
-        _bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode=None)
+        _bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode=None, threaded=False)
 
         # Register all handlers — order matters (most specific first)
         admin_manual_order.register(_bot)   # admin_renewed_ + /manual_order
