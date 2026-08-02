@@ -12,6 +12,7 @@ build/
 # Secrets — NEVER commit these
 .env
 *.json
+!vercel.json
 !requirements.txt
 prod_bot_data.db
 *.db
