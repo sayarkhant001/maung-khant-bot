@@ -1,12 +1,4 @@
 {
-  "functions": {
-    "api/webhook.py": {
-      "maxDuration": 10
-    },
-    "api/cron.py": {
-      "maxDuration": 60
-    }
-  },
   "crons": [
     {
       "path": "/api/cron",

@@ -1,11 +1,10 @@
 """
-Main Telegram Webhook — receives all updates from Telegram.
-Registered at: POST /api/webhook
+Telegram bot initialization — registers all handlers, exposes get_bot().
+Imported by api/index.py (Flask entrypoint).
 """
 import json
 import os
 import sys
-from http.server import BaseHTTPRequestHandler
 
 import telebot
 
@@ -16,7 +15,6 @@ from lib.handlers import user, buy, gift, admin
 from lib.handlers import admin_manual_order, admin_plans, admin_payments, admin_reports
 
 # ─── Lazy Bot Init ────────────────────────────────────────────────────────────
-# Bot is created on first request to avoid errors at import time
 _bot = None
 
 
@@ -54,32 +52,3 @@ def get_bot() -> telebot.TeleBot:
                 pass
 
     return _bot
-
-
-# ─── Vercel Handler ───────────────────────────────────────────────────────────
-class handler(BaseHTTPRequestHandler):
-
-    def do_POST(self):
-        content_length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(content_length)
-        try:
-            update_dict = json.loads(body.decode("utf-8"))
-            update = telebot.types.Update.de_json(update_dict)
-            get_bot().process_new_updates([update])
-        except Exception as e:
-            print(f"Webhook error: {e}")
-        self._respond(200, {"ok": True})
-
-    def do_GET(self):
-        self._respond(200, {"status": "ok", "bot": "@maungkhantsbot running"})
-
-    def _respond(self, status, data):
-        body = json.dumps(data).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *args):
-        pass

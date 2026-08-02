@@ -1,20 +1,17 @@
 """
-Vercel Cron Job — runs daily at 3:00 AM UTC (9:30 AM Myanmar time).
+Cron job logic — exposes run_cron() and CRON_SECRET.
+Called by api/index.py (Flask entrypoint) at GET /api/cron.
+Runs daily at 3:00 AM UTC (9:30 AM Myanmar time).
 Tasks:
   1. Expire old unsubmitted orders
   2. Send expiry reminders to subscribers (5d, 3d, 1d, 0d)
   3. Send 41/42-day manual renewal alerts to admin
-     (41 days for plans >= 90 days, 42 days for shorter plans)
 """
-import json
 import os
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler
 
 import telebot
 
-# ─── Bootstrap ────────────────────────────────────────────────────────────────
-# Must import config before sheets to load env vars
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -24,30 +21,6 @@ from lib.messages import EXPIRY_REMINDER, EXPIRY_REMINDER_0, MANUAL_RENEWAL_REMI
 bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode=None)
 
 CRON_SECRET = os.getenv("CRON_SECRET", "")  # optional security header
-
-
-class handler(BaseHTTPRequestHandler):
-
-    def do_GET(self):
-        # Vercel cron calls GET /api/cron
-        secret = self.headers.get("x-cron-secret", "")
-        if CRON_SECRET and secret != CRON_SECRET:
-            self._respond(401, {"error": "Unauthorized"})
-            return
-
-        results = run_cron()
-        self._respond(200, results)
-
-    def _respond(self, status, data):
-        body = json.dumps(data).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *args):
-        pass  # suppress default logging
 
 
 def run_cron() -> dict:
@@ -81,7 +54,6 @@ def run_cron() -> dict:
                 sub_id = sub.get("id", "")
                 product = sub.get("product_type", "subscription")
 
-                # Check which reminder to send
                 sent = False
 
                 if days_left == 0 and str(sub.get("reminder_0day_sent", "")).upper() != "TRUE":
@@ -91,7 +63,6 @@ def run_cron() -> dict:
                         parse_mode="Markdown",
                     )
                     sheets.update_subscription(sub_id, reminder_0day_sent="TRUE")
-                    # Deactivate if fully expired
                     sheets.expire_subscription(sub_id)
                     sheets.deactivate_manual_renewal(sub_id)
                     sent = True
@@ -114,7 +85,6 @@ def run_cron() -> dict:
                     sheets.update_subscription(sub_id, reminder_3day_sent="TRUE")
                     sent = True
 
-                # Also send 5-day reminder (reuse 3day field as 5day flag is not separate)
                 elif days_left == 5 and str(sub.get("reminder_3day_sent", "")).upper() != "TRUE":
                     bot.send_message(
                         chat_id,
@@ -144,14 +114,12 @@ def run_cron() -> dict:
             plan = r.get("plan_name", "")
             expiry_str = str(r.get("expiry_date", ""))[:10]
 
-            # Calculate days left until expiry
             try:
                 exp_dt = datetime.strptime(expiry_str, "%Y-%m-%d")
                 days_left = (exp_dt - datetime.utcnow()).days
             except Exception:
                 days_left = "?"
 
-            # Send alert to ADMIN (not to user)
             from lib.bot_helpers import admin_main_keyboard
             markup = telebot.types.InlineKeyboardMarkup()
             markup.add(
@@ -182,7 +150,6 @@ def run_cron() -> dict:
                 reply_markup=markup,
             )
 
-            # Look up plan_days so the next interval is correct (41d long / 42d short)
             plan_days = 0
             try:
                 plan_name = r.get("plan_name", "")
@@ -195,7 +162,6 @@ def run_cron() -> dict:
             except Exception:
                 plan_days = 0
 
-            # Push next reminder forward (41d if long plan, 42d if short)
             sheets.mark_manual_renewal_reminded(sub_id, plan_days=plan_days)
             results["manual_renewal_alerts"] += 1
 
