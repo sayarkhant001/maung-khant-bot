@@ -141,6 +141,26 @@ def test_update():
         return jsonify({"error": str(e), "trace": traceback.format_exc()})
 
 
+# ─── Receipt preview (browser) ────────────────────────────────────────────────
+
+@app.route("/api/preview-receipt", methods=["GET"])
+def preview_receipt():
+    try:
+        from lib.receipt import generate_receipt
+        from flask import Response
+        from datetime import datetime
+        png = generate_receipt(
+            order_id="SUB-20260803-001",
+            product="ZOOM",
+            plan_name="Zoom Pro 30 Days",
+            start_date="2026-08-03",
+            expiry_date="2026-09-02",
+            username="sayarkhant0",
+            issued_at=datetime.utcnow(),
+        )
+        return Response(png, mimetype="image/png")
+    except Exception as e:
+        return jsonify({"error": str(e), "trace": traceback.format_exc()})
 
 
 # Vercel Python runtime entry point
