@@ -69,6 +69,17 @@ Product    {product}
 
 Thank you for your purchase! 🎉"""
 
+ORDER_APPROVED_NOTIFICATION = """✅ *Order Approved!*
+━━━━━━━━━━━━━━━━━━━
+Order ID   `{order_id}`
+Status     ✅ *Approved*
+━━━━━━━━━━━━━━━━━━━
+
+Your payment has been verified! 🎉
+We are preparing your credentials and will send them to you *shortly*.
+
+_Please wait a moment..._"""
+
 ORDER_DECLINED = """❌ *Payment Not Verified*
 ━━━━━━━━━━━━━━━━━━━
 Order   `{order_id}`
@@ -77,6 +88,7 @@ Status  Declined
 
 We were unable to verify your payment.
 Please contact support: {support}"""
+
 
 MY_SUBSCRIPTIONS_HEADER = "📦 *My Subscriptions*"
 

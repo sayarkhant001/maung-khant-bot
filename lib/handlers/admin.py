@@ -178,10 +178,22 @@ Created:   {order.get('created_at','')}"""
             bot.answer_callback_query(call.id, "Order not found.", show_alert=True)
             return
 
+        # Immediately notify customer: order approved, credentials coming soon
+        try:
+            user_chat_id_now = int(order.get("chat_id") or order.get("user_id"))
+            from lib.messages import ORDER_APPROVED_NOTIFICATION
+            bot.send_message(
+                user_chat_id_now,
+                ORDER_APPROVED_NOTIFICATION.format(order_id=order_id),
+                parse_mode="Markdown",
+            )
+        except Exception as _e:
+            pass  # don't block admin flow
+
         # Ask admin for delivery details (key/link/credentials)
-        msg = bot.send_message(
+        bot.send_message(
             call.message.chat.id,
-            f"✅ Order `{order_id}` approved.\n\n"
+            f"✅ Order `{order_id}` approved. Customer notified.\n\n"
             f"📤 Send the delivery info to forward to the user:\n"
             f"_(VPN key, Zoom credentials, Canva invite link, etc.)_",
             parse_mode="Markdown",
@@ -217,9 +229,33 @@ Created:   {order.get('created_at','')}"""
 
         try:
             bot.send_message(user_chat_id, user_msg, parse_mode="Markdown")
+
+            # Send thermal receipt image
+            try:
+                import io as _io
+                from lib.receipt import generate_receipt
+                start_str = sub.get("created_at", "")[:10]
+                expiry_str = sub.get("expiry_date", "")[:10]
+                receipt_png = generate_receipt(
+                    order_id=sub["id"],
+                    product=product_type,
+                    plan_name=order.get("plan_name", ""),
+                    start_date=start_str,
+                    expiry_date=expiry_str,
+                    username=order.get("username", ""),
+                )
+                bot.send_photo(
+                    user_chat_id,
+                    _io.BytesIO(receipt_png),
+                    caption="🧾 *Your Official Receipt*\nKhant Digital Products • @KhantsManagerBot",
+                    parse_mode="Markdown",
+                )
+            except Exception as _re:
+                print(f"Receipt generation error: {_re}")
+
             bot.send_message(
                 message.chat.id,
-                f"✅ Delivery sent to user.\nSubscription created: `{sub['id']}`",
+                f"✅ Delivery + receipt sent to user.\nSubscription: `{sub['id']}`",
                 parse_mode="Markdown",
             )
         except Exception as e:

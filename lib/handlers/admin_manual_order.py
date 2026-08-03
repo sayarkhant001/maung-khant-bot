@@ -241,8 +241,35 @@ def register(bot: telebot.TeleBot):
             if delivery_text:
                 customer_msg += f"\n\n📦 *Your Access Details:*\n`{delivery_text}`"
             bot.send_message(s["chat_id"], customer_msg, parse_mode="Markdown")
+
+            # Send thermal receipt
+            try:
+                import io as _io
+                from lib.receipt import generate_receipt
+                start_str = sub.get("created_at", datetime.utcnow().strftime("%Y-%m-%d"))
+                if hasattr(start_str, "strftime"):
+                    start_str = start_str.strftime("%Y-%m-%d")
+                start_str = str(start_str)[:10]
+                receipt_png = generate_receipt(
+                    order_id=sub["id"],
+                    product=s["product_type"],
+                    plan_name=s["plan_name"],
+                    start_date=start_str,
+                    expiry_date=expiry,
+                    username=s.get("username", ""),
+                )
+                bot.send_photo(
+                    s["chat_id"],
+                    _io.BytesIO(receipt_png),
+                    caption="🧾 *Your Official Receipt*\nKhant Digital Products • @KhantsManagerBot",
+                    parse_mode="Markdown",
+                )
+            except Exception as _re:
+                print(f"Receipt error: {_re}")
+
         except Exception as e:
             bot.send_message(message.chat.id, f"⚠️ Could not notify customer: {e}")
+
 
         # Cleanup state
         _state.pop(message.chat.id, None)
