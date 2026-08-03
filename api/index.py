@@ -102,5 +102,46 @@ def index():
     return jsonify({"status": "ok"})
 
 
+# ─── Test: send message directly ──────────────────────────────────────────────
+
+@app.route("/api/test-message", methods=["GET"])
+def test_message():
+    try:
+        from api.webhook import get_bot
+        from lib import config
+        bot = get_bot()
+        bot.send_message(config.ADMIN_ID, "\u2705 Test from Vercel: bot.send_message() works!")
+        return jsonify({"ok": True, "sent_to": config.ADMIN_ID})
+    except Exception as e:
+        return jsonify({"error": str(e), "trace": traceback.format_exc()})
+
+
+# ─── Test: simulate a /start webhook update ───────────────────────────────────
+
+@app.route("/api/test-update", methods=["GET"])
+def test_update():
+    try:
+        from api.webhook import get_bot
+        from lib import config
+        bot = get_bot()
+        fake_update = {
+            "update_id": 999999,
+            "message": {
+                "message_id": 1,
+                "from": {"id": config.ADMIN_ID, "is_bot": False, "first_name": "Admin", "username": "admin"},
+                "chat": {"id": config.ADMIN_ID, "type": "private"},
+                "date": 1700000000,
+                "text": "/start"
+            }
+        }
+        update = telebot.types.Update.de_json(fake_update)
+        bot.process_new_updates([update])
+        return jsonify({"ok": True, "message": "Processed /start — check Telegram"})
+    except Exception as e:
+        return jsonify({"error": str(e), "trace": traceback.format_exc()})
+
+
+
+
 # Vercel Python runtime entry point
 handler = app
