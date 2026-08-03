@@ -88,7 +88,7 @@ SHEET_SCHEMAS = {
     ],
     "vpn_plans": [
         "id", "name", "vpn_type", "days", "data_limit_gb",
-        "price", "buying_price", "status", "sort_order"
+        "price", "renew_price", "buying_price", "status", "sort_order"
     ],
     "zoom_plans": [
         "id", "name", "days", "price", "renew_price", "buying_price", "status", "sort_order"
