@@ -91,10 +91,10 @@ SHEET_SCHEMAS = {
         "price", "buying_price", "status", "sort_order"
     ],
     "zoom_plans": [
-        "id", "name", "days", "price", "buying_price", "status", "sort_order"
+        "id", "name", "days", "price", "renew_price", "buying_price", "status", "sort_order"
     ],
     "canva_plans": [
-        "id", "name", "days", "price", "buying_price", "status", "sort_order"
+        "id", "name", "days", "price", "renew_price", "buying_price", "status", "sort_order"
     ],
     "payment_methods": [
         "id", "name", "type", "account_info", "account_name", "note", "icon", "is_active"
@@ -418,6 +418,31 @@ def get_user_subscriptions(user_id: int) -> List[Dict]:
     records = _sheet_to_dicts(get_sheet("subscriptions"))
     return [r for r in records if str(r.get("user_id")) == str(user_id)
             and r.get("status") == "active"]
+
+
+def is_renewal_eligible(user_id: int, product_type: str) -> bool:
+    """
+    Return True if the user qualifies for a renewal discount price.
+    Eligible when they have an active subscription OR one that expired
+    within the last 3 days for the given product type.
+    """
+    records = _sheet_to_dicts(get_sheet("subscriptions"))
+    cutoff = datetime.utcnow() - timedelta(days=3)
+    for r in records:
+        if str(r.get("user_id")) != str(user_id):
+            continue
+        if r.get("product_type", "").upper() != product_type.upper():
+            continue
+        expiry_raw = str(r.get("expiry_date", ""))[:10]
+        if not expiry_raw:
+            continue
+        try:
+            expiry_dt = datetime.strptime(expiry_raw, "%Y-%m-%d")
+            if expiry_dt >= cutoff:   # active or expired ≤ 3 days ago
+                return True
+        except ValueError:
+            pass
+    return False
 
 
 def get_all_active_subscriptions() -> List[Dict]:

@@ -41,12 +41,13 @@ def register(bot: telebot.TeleBot):
         if not plans:
             bot.answer_callback_query(call.id, "No Zoom plans available right now.", show_alert=True)
             return
+        renew_eligible = sheets.is_renewal_eligible(call.from_user.id, "ZOOM")
         bot.edit_message_text(
             ZOOM_CATEGORY_TEXT,
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
             parse_mode="Markdown",
-            reply_markup=zoom_plans_keyboard(plans),
+            reply_markup=zoom_plans_keyboard(plans, renew_eligible=renew_eligible),
         )
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith("plan_zoom_"))
@@ -63,12 +64,13 @@ def register(bot: telebot.TeleBot):
         if not plans:
             bot.answer_callback_query(call.id, "No Canva plans available right now.", show_alert=True)
             return
+        renew_eligible = sheets.is_renewal_eligible(call.from_user.id, "CANVA")
         bot.edit_message_text(
             CANVA_CATEGORY_TEXT,
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
             parse_mode="Markdown",
-            reply_markup=canva_plans_keyboard(plans),
+            reply_markup=canva_plans_keyboard(plans, renew_eligible=renew_eligible),
         )
 
     @bot.callback_query_handler(func=lambda c: c.data.startswith("plan_canva_"))
@@ -128,13 +130,23 @@ def _show_checkout(bot, call, sheet_name, product_type, plan_id):
         chat_id=call.message.chat.id,
     )
 
+    # Determine price: renewal eligible users get renew_price if set
+    renew_eligible = sheets.is_renewal_eligible(user.id, product_type)
+    rp = str(plan.get("renew_price", "")).strip()
+    if renew_eligible and rp and rp not in ("", "0", "0.0"):
+        chosen_price = int(float(rp))
+        price_label  = f"{rp} MMK (Renewal Price)"
+    else:
+        chosen_price = int(float(plan["price"]))
+        price_label  = f"{plan['price']} MMK"
+
     order = sheets.create_order(
         user_id=user.id,
         chat_id=call.message.chat.id,
         username=user.username or "",
         product_type=product_type,
         plan_name=plan["name"],
-        amount=int(plan["price"]),
+        amount=chosen_price,
     )
 
     methods = sheets.get_active_payment_methods()
@@ -142,7 +154,7 @@ def _show_checkout(bot, call, sheet_name, product_type, plan_id):
 
     text = PAYMENT_INSTRUCTIONS.format(
         plan_name=plan["name"],
-        amount=plan["price"],
+        amount=price_label,
         payment_methods=methods_text,
     )
     text += f"\n\nOrder ID: `{order['order_id']}`"

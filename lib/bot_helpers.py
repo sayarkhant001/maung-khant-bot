@@ -47,19 +47,29 @@ def back_to_buy() -> types.InlineKeyboardMarkup:
 
 # ─── Plan Keyboards ───────────────────────────────────────────────────────────
 
-def zoom_plans_keyboard(plans: List[Dict]) -> types.InlineKeyboardMarkup:
+def zoom_plans_keyboard(plans: List[Dict], renew_eligible: bool = False) -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=1)
     for p in sorted(plans, key=lambda x: int(x.get("sort_order", 99) or 99)):
-        label = f"🎥 {p['name']} · {p['days']} days · {p['price']} MMK"
+        rp = str(p.get("renew_price", "")).strip()
+        if renew_eligible and rp and rp not in ("", "0", "0.0"):
+            price_label = f"🔄 {rp} MMK (Renewal)"
+        else:
+            price_label = f"{p['price']} MMK"
+        label = f"🎥 {p['name']} · {p['days']} days · {price_label}"
         markup.add(types.InlineKeyboardButton(label, callback_data=f"plan_zoom_{p['id']}"))
     markup.add(types.InlineKeyboardButton("⬅️ Back", callback_data="menu_buy"))
     return markup
 
 
-def canva_plans_keyboard(plans: List[Dict]) -> types.InlineKeyboardMarkup:
+def canva_plans_keyboard(plans: List[Dict], renew_eligible: bool = False) -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=1)
     for p in sorted(plans, key=lambda x: int(x.get("sort_order", 99) or 99)):
-        label = f"🎨 {p['name']} · {p['days']} days · {p['price']} MMK"
+        rp = str(p.get("renew_price", "")).strip()
+        if renew_eligible and rp and rp not in ("", "0", "0.0"):
+            price_label = f"🔄 {rp} MMK (Renewal)"
+        else:
+            price_label = f"{p['price']} MMK"
+        label = f"🎨 {p['name']} · {p['days']} days · {price_label}"
         markup.add(types.InlineKeyboardButton(label, callback_data=f"plan_canva_{p['id']}"))
     markup.add(types.InlineKeyboardButton("⬅️ Back", callback_data="menu_buy"))
     return markup
