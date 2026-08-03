@@ -155,6 +155,7 @@ def preview_receipt():
             plan_name="Zoom Pro 30 Days",
             start_date="2026-08-03",
             expiry_date="2026-09-02",
+            amount="5,000",
             username="sayarkhant0",
             issued_at=datetime.utcnow(),
         )

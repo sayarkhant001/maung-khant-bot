@@ -242,6 +242,7 @@ Created:   {order.get('created_at','')}"""
                     plan_name=order.get("plan_name", ""),
                     start_date=start_str,
                     expiry_date=expiry_str,
+                    amount=str(order.get("amount", "")),
                     username=order.get("username", ""),
                 )
                 bot.send_photo(
