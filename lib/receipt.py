@@ -1,6 +1,5 @@
 """
-Thermal POS receipt generator — realistic paper look with price, columns, texture.
-No emojis (system fonts don't render them on Vercel/Debian).
+Thermal POS receipt — prominent fonts, deliberate spacing, realistic paper.
 """
 from __future__ import annotations
 
@@ -10,12 +9,10 @@ from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-# ─── Shop ─────────────────────────────────────────────────────────────────────
 SHOP_NAME    = "KHANT DIGITAL PRODUCTS"
 SHOP_TAGLINE = "Digital Subscriptions & Services"
 SHOP_CONTACT = "@KhantsManagerBot"
 
-# ─── Font paths ───────────────────────────────────────────────────────────────
 _BOLD = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf",
@@ -30,7 +27,7 @@ _REG = [
 ]
 
 
-def _load(paths: list[str], size: int):
+def _load(paths, size):
     for p in paths:
         try:
             return ImageFont.truetype(p, size)
@@ -39,24 +36,24 @@ def _load(paths: list[str], size: int):
     return None
 
 
-def _w(font, text: str) -> int:
+def _tw(font, text):
     if font is None:
-        return len(text) * 7
+        return len(text) * 9
     try:
         bb = font.getbbox(text)
         return bb[2] - bb[0]
     except Exception:
-        return len(text) * 8
+        return len(text) * 9
 
 
-def _h(font, text: str = "Ag") -> int:
+def _th(font):
     if font is None:
-        return 14
+        return 16
     try:
-        bb = font.getbbox(text)
+        bb = font.getbbox("Ag")
         return bb[3] - bb[1]
     except Exception:
-        return 14
+        return 16
 
 
 def _put(draw, xy, text, font, fill=(0, 0, 0)):
@@ -64,35 +61,33 @@ def _put(draw, xy, text, font, fill=(0, 0, 0)):
     draw.text(xy, text, font=f, fill=fill)
 
 
-def _add_paper_texture(img: Image.Image, strength: int = 8) -> Image.Image:
-    """Add subtle grain to simulate thermal paper texture."""
-    rng = random.Random(42)
+def _paper_texture(img, strength=6):
+    rng = random.Random(7)
     w, h = img.size
-    pixels = img.load()
-    for py in range(0, h, 2):
-        for px in range(0, w, 2):
-            noise = rng.randint(-strength, strength)
-            r, g, b = pixels[px, py]
-            r = max(220, min(255, r + noise))
-            g = max(218, min(255, g + noise))
-            b = max(205, min(255, b + noise))
-            pixels[px, py] = (r, g, b)
+    px = img.load()
+    for py in range(h):
+        for x in range(0, w, 2):
+            n = rng.randint(-strength, strength)
+            r, g, b = px[x, py]
+            px[x, py] = (
+                max(218, min(255, r + n)),
+                max(215, min(255, g + n)),
+                max(202, min(255, b + n)),
+            )
     return img
 
 
-def _draw_torn_edge(draw, y: int, w: int, top: bool = True):
-    """Draw a micro-serrated edge to simulate torn thermal paper."""
-    step = 6
-    amp = 3
+def _torn_edge(draw, y, w, seed):
+    rng = random.Random(seed)
+    step, amp = 5, 4
     prev = y
-    rng = random.Random(1 if top else 2)
     for x in range(0, w, step):
         ny = y + rng.randint(-amp, amp)
-        draw.line([(x, prev), (x + step, ny)], fill=(210, 205, 190), width=2)
+        draw.line([(x, prev), (x + step, ny)], fill=(200, 196, 182), width=2)
         prev = ny
 
 
-# ─── Public API ───────────────────────────────────────────────────────────────
+# ─── Public ───────────────────────────────────────────────────────────────────
 
 def generate_receipt(
     order_id: str,
@@ -104,235 +99,214 @@ def generate_receipt(
     username: str = "",
     issued_at: datetime | None = None,
 ) -> bytes:
-    """
-    Generate a realistic thermal receipt PNG.
+    now   = issued_at or datetime.utcnow()
+    date  = now.strftime("%d %b %Y").upper()
+    time_ = now.strftime("%I:%M %p")
 
-    Parameters
-    ----------
-    order_id    : Subscription / order ID string
-    product     : e.g. "ZOOM" or "CANVA"
-    plan_name   : e.g. "Zoom Pro 30 Days"
-    start_date  : "YYYY-MM-DD"
-    expiry_date : "YYYY-MM-DD"
-    amount      : Price string e.g. "5,000" or "5000 MMK" (optional)
-    username    : Customer @username (without @)
-    issued_at   : datetime; defaults to UTC now
-    """
-    now = issued_at or datetime.utcnow()
-    date_str = now.strftime("%d %b %Y").upper()
-    time_str = now.strftime("%I:%M %p")
-
-    # Format amount
+    # Format price
+    amt_str = ""
     if amount:
-        amt_str = str(amount).strip()
-        if "MMK" not in amt_str.upper():
-            amt_str = f"{amt_str} MMK"
-        amt_display = amt_str
-    else:
-        amt_display = ""
+        a = str(amount).strip()
+        amt_str = a if "MMK" in a.upper() else f"{a} MMK"
 
     # ── Canvas ────────────────────────────────────────────────────────────────
-    W   = 400          # narrow thermal roll width
-    PAD = 22
-    IW  = W - PAD * 2  # inner width
+    W     = 480
+    PAD   = 26
+    PAPER = (252, 248, 235)     # warm cream
+    INK   = (12, 12, 12)        # strong black ink
+    DIM   = (75, 70, 60)        # secondary labels
+    RULE  = (175, 170, 155)     # separator lines
 
-    # Thermal paper color — warm off-white / cream
-    PAPER = (253, 249, 238)
-    INK   = (15, 15, 15)     # near-black ink
-    DIM   = (100, 95, 85)    # secondary text
-    RULE  = (190, 185, 170)  # separator line colour
+    # ── Fonts — deliberately large & bold ─────────────────────────────────────
+    F_SHOP  = _load(_BOLD, 24)   # shop name — largest
+    F_HEAD  = _load(_BOLD, 16)   # column headers, section labels
+    F_BOLD  = _load(_BOLD, 15)   # bold data (expiry, total)
+    F_REG   = _load(_REG,  15)   # regular data rows
+    F_SMALL = _load(_REG,  13)   # sub-text, footer
 
-    # ── Fonts ─────────────────────────────────────────────────────────────────
-    f_xl   = _load(_BOLD, 19)  # shop name
-    f_lg   = _load(_BOLD, 15)  # section headers
-    f_md   = _load(_BOLD, 13)  # bold body
-    f_reg  = _load(_REG,  13)  # regular body
-    f_sm   = _load(_REG,  11)  # small footer
+    # Line heights — generous padding between rows
+    LH_XL  = _th(F_SHOP)  + 14   # shop name line
+    LH_HD  = _th(F_HEAD)  + 12   # header row
+    LH_REG = _th(F_REG)   + 12   # regular row
+    LH_SM  = _th(F_SMALL) + 8    # small row
+    LH_TOT = _th(F_BOLD)  + 16   # total amount row
+    SEP    = 10                   # separator line height slot
 
-    LH  = _h(f_reg) + 8   # normal line height
-    BH  = _h(f_xl)  + 10  # xl line height
-    SH  = _h(f_sm)  + 6   # small line height
+    # ── Row definitions ───────────────────────────────────────────────────────
+    rows: list[tuple] = []
 
-    # ── Rows ──────────────────────────────────────────────────────────────────
-    # (kind, *payload)
-    rows: list[tuple] = [
-        ("gap",   20),
-        ("cx",    SHOP_NAME, f_xl),
-        ("gap",   2),
-        ("cx",    SHOP_TAGLINE, f_sm),
-        ("gap",   12),
-        ("rule",  2),
-        ("gap",   8),
-        ("kv",    "DATE",      date_str,  f_reg, f_reg),
-        ("kv",    "TIME",      time_str,  f_reg, f_reg),
-        ("kv",    "RECEIPT #", order_id,  f_reg, f_md),
-    ]
+    def gap(n):         rows.append(("gap", n))
+    def rule(t=1):      rows.append(("rule", t))
+    def cx(txt, f, lh): rows.append(("cx", txt, f, lh))
+    def kv(lbl, val, lf=None, vf=None):
+        rows.append(("kv", lbl, val, lf or F_REG, vf or F_REG))
+    def kvb(lbl, val):  rows.append(("kv", lbl, val, F_HEAD, F_BOLD))
+
+    gap(22)
+    cx(SHOP_NAME,    F_SHOP,  LH_XL)
+    gap(4)
+    cx(SHOP_TAGLINE, F_SMALL, LH_SM)
+    gap(16)
+
+    rule(2)
+    gap(10)
+
+    kv("DATE",       date)
+    kv("TIME",       time_)
+    kv("RECEIPT #",  order_id, F_REG, F_BOLD)
 
     if username:
-        disp = username if username.startswith("@") else f"@{username}"
-        rows.append(("kv", "CUSTOMER", disp, f_md, f_md))
+        d = username if username.startswith("@") else f"@{username}"
+        kvb("CUSTOMER", d)
 
-    rows += [
-        ("gap",   10),
-        ("rule",  1),
-        ("gap",   5),
-        # Column header row
-        ("cols",),
-        ("gap",   5),
-        ("rule",  1),
-        ("gap",   6),
-        # Item row: QTY | DESCRIPTION | AMOUNT
-        ("item",  "1", plan_name, amt_display),
-        ("gap",   6),
-        ("rule",  1),
-    ]
+    gap(10)
+    rule(1)
+    gap(8)
 
-    # Details block
-    rows += [
-        ("gap",   5),
-        ("kv",    "Product",     product.upper(), f_reg, f_reg),
-        ("kv",    "Start Date",  start_date,      f_reg, f_reg),
-        ("kv",    "Expiry Date", expiry_date,      f_reg, f_md),
-        ("gap",   5),
-        ("rule",  1),
-    ]
+    # Column header
+    rows.append(("col_hdr",))
+    gap(6)
+    rule(1)
+    gap(8)
 
-    # Total block
-    if amt_display:
-        rows += [
-            ("gap",   8),
-            ("total", amt_display),
-            ("gap",   8),
-            ("rule",  2),
-            ("rule",  2),
-        ]
-    else:
-        rows += [
-            ("gap",   4),
-            ("rule",  2),
-        ]
+    # Item row
+    rows.append(("item_row", "1", plan_name, amt_str))
+    gap(8)
+    rule(1)
+    gap(8)
+
+    # Subscription details
+    kv("Product",     product.upper())
+    kv("Start Date",  start_date)
+    kvb("Expiry Date", expiry_date)
+    gap(8)
+    rule(1)
+
+    # Total
+    if amt_str:
+        gap(12)
+        rows.append(("total", amt_str))
+        gap(12)
+        rule(2)
+        gap(2)
+        rule(2)
 
     # Footer
-    rows += [
-        ("gap",   10),
-        ("cx",    "Thank You for Your Purchase!", f_md),
-        ("gap",   4),
-        ("cx",    f"Contact: {SHOP_CONTACT}", f_sm),
-        ("cx",    "Powered by: Khant Digital Products", f_sm),
-        ("gap",   20),
-    ]
+    gap(14)
+    cx("Thank You for Your Purchase!", F_BOLD,  LH_HD)
+    gap(4)
+    cx(f"Contact: {SHOP_CONTACT}",     F_SMALL, LH_SM)
+    cx("Powered by: Khant Digital Products", F_SMALL, LH_SM)
+    gap(22)
 
-    # ── Height calculation ─────────────────────────────────────────────────────
+    # ── Compute height ─────────────────────────────────────────────────────────
     H = 0
-    for row in rows:
-        k = row[0]
-        if k == "gap":
-            H += row[1]
-        elif k == "cx":
-            fnt = row[2]
-            H += _h(fnt) + 8
-        elif k == "rule":
-            H += 8
-        elif k in ("cols", "item"):
-            H += LH
-        elif k == "total":
-            H += _h(f_lg) + 14
-        else:  # kv
-            H += LH
+    for r in rows:
+        k = r[0]
+        if k == "gap":      H += r[1]
+        elif k == "rule":   H += SEP
+        elif k == "cx":     H += r[3]
+        elif k == "kv":     H += LH_REG
+        elif k == "col_hdr":H += LH_HD
+        elif k == "item_row":H += LH_REG
+        elif k == "total":  H += LH_TOT
 
-    H += 10  # bottom torn edge clearance
+    H += 10  # bottom clearance for torn edge
 
     # ── Draw ──────────────────────────────────────────────────────────────────
     img  = Image.new("RGB", (W, H), PAPER)
     draw = ImageDraw.Draw(img)
 
     y = 0
-    for row in rows:
-        k = row[0]
+    IW = W - PAD * 2
+
+    for r in rows:
+        k = r[0]
 
         if k == "gap":
-            y += row[1]
+            y += r[1]
 
-        elif k == "cx":           # centred text
-            text, fnt = row[1], row[2]
-            tw = _w(fnt, text)
-            x  = max(PAD, (W - tw) // 2)
-            _put(draw, (x, y), text, fnt, INK)
-            y += _h(fnt) + 8
+        elif k == "rule":
+            thick = r[1]
+            my = y + SEP // 2
+            draw.line([(PAD, my), (W - PAD, my)], fill=RULE, width=thick)
+            y += SEP
 
-        elif k == "rule":         # horizontal rule
-            thick = row[1]
-            draw.line([(PAD, y + 3), (W - PAD, y + 3)], fill=RULE, width=thick)
-            y += 8
+        elif k == "cx":
+            _, txt, f, lh = r
+            tw = _tw(f, txt)
+            _put(draw, (max(PAD, (W - tw) // 2), y), txt, f, INK)
+            y += lh
 
-        elif k == "kv":           # label + right-aligned value
-            _, label, value, lf, vf = row
-            _put(draw, (PAD, y), label, lf, DIM)
-            vw = _w(vf, value)
-            vx = W - PAD - vw
-            # Ensure value doesn't overlap label
-            lw = _w(lf, label) + PAD + 6
-            vx = max(lw, vx)
-            _put(draw, (vx, y), value, vf, INK)
-            y += LH
+        elif k == "kv":
+            _, lbl, val, lf, vf = r
+            _put(draw, (PAD, y), lbl, lf, DIM)
+            vw = _tw(vf, val)
+            vx = max(PAD + _tw(lf, lbl) + 8, W - PAD - vw)
+            _put(draw, (vx, y), val, vf, INK)
+            y += LH_REG
 
-        elif k == "cols":         # column header
-            qty_col   = "QTY"
-            desc_col  = "DESCRIPTION"
-            amt_col   = "AMOUNT"
-            _put(draw, (PAD, y),                       qty_col,  f_md, INK)
-            dw = _w(f_md, desc_col)
-            _put(draw, ((W - dw) // 2, y),            desc_col, f_md, INK)
-            aw = _w(f_md, amt_col)
-            _put(draw, (W - PAD - aw, y),              amt_col,  f_md, INK)
-            y += LH
+        elif k == "col_hdr":
+            cols = [("QTY", PAD), ("DESCRIPTION", W // 2), ("AMOUNT", W - PAD)]
+            anchors = ["left", "center", "right"]
+            for i, (txt, cx_) in enumerate(cols):
+                tw = _tw(F_HEAD, txt)
+                if anchors[i] == "left":
+                    _put(draw, (cx_, y), txt, F_HEAD, INK)
+                elif anchors[i] == "center":
+                    _put(draw, (cx_ - tw // 2, y), txt, F_HEAD, INK)
+                else:
+                    _put(draw, (cx_ - tw, y), txt, F_HEAD, INK)
+            y += LH_HD
 
-        elif k == "item":         # data row: qty | description | amount
-            _, qty, desc, amt = row
-            # Quantity
-            _put(draw, (PAD, y), qty, f_reg, INK)
-            # Description (centered, truncated to fit)
-            max_desc_w = IW - _w(f_reg, qty) - _w(f_reg, amt) - 20
-            # Truncate description if too long
+        elif k == "item_row":
+            _, qty, desc, amt = r
+            # QTY
+            _put(draw, (PAD, y), qty, F_REG, INK)
+            # DESCRIPTION — centred, truncated
+            max_w = IW - _tw(F_REG, qty) - (_tw(F_BOLD, amt) if amt else 0) - 24
             d = desc
-            while _w(f_reg, d) > max_desc_w and len(d) > 5:
+            while _tw(F_REG, d) > max_w and len(d) > 4:
                 d = d[:-2]
-            dw = _w(f_reg, d)
-            _put(draw, ((W - dw) // 2, y), d, f_reg, INK)
-            # Amount
+            dw = _tw(F_REG, d)
+            _put(draw, ((W - dw) // 2, y), d, F_REG, INK)
+            # AMOUNT
             if amt:
-                aw = _w(f_md, amt)
-                _put(draw, (W - PAD - aw, y), amt, f_md, INK)
-            y += LH
+                aw = _tw(F_BOLD, amt)
+                _put(draw, (W - PAD - aw, y), amt, F_BOLD, INK)
+            y += LH_REG
 
-        elif k == "total":        # TOTAL AMOUNT line
+        elif k == "total":
+            _, amt = r
             label = "TOTAL AMOUNT:"
-            value = row[1]
-            pipe  = " | "
-            full  = f"{label}{pipe}{value}"
-            fw = _w(f_lg, full)
-            x  = max(PAD, (W - fw) // 2)
-            _put(draw, (x, y),                    label,         f_lg, INK)
-            _put(draw, (x + _w(f_lg, label), y),  pipe,          f_lg, DIM)
-            _put(draw, (x + _w(f_lg, label + pipe), y), value,   f_lg, INK)
-            y += _h(f_lg) + 14
+            pipe  = "  |  "
+            value = amt
+            lw = _tw(F_BOLD, label)
+            pw = _tw(F_BOLD, pipe)
+            vw = _tw(F_BOLD, value)
+            total_w = lw + pw + vw
+            sx = max(PAD, (W - total_w) // 2)
+            _put(draw, (sx, y),          label, F_BOLD, INK)
+            _put(draw, (sx + lw, y),     pipe,  F_BOLD, DIM)
+            _put(draw, (sx + lw + pw, y),value, F_BOLD, INK)
+            y += LH_TOT
 
-    # ── Paper effects ──────────────────────────────────────────────────────────
-    # Subtle shadow on left & right edges (depth illusion)
-    for i in range(6):
-        shade = 230 - i * 4
-        draw.line([(i, 0), (i, H)], fill=(shade, shade - 2, shade - 8))
-        draw.line([(W - 1 - i, 0), (W - 1 - i, H)], fill=(shade, shade - 2, shade - 8))
+    # ── Realism effects ───────────────────────────────────────────────────────
+    # Edge depth shadows
+    for i in range(8):
+        s = 228 - i * 4
+        draw.line([(i, 0), (i, H)],           fill=(s, s - 3, s - 10))
+        draw.line([(W - 1 - i, 0), (W - 1 - i, H)], fill=(s, s - 3, s - 10))
 
-    # Torn top & bottom edges
-    _draw_torn_edge(draw, 0, W, top=True)
-    _draw_torn_edge(draw, H - 4, W, top=False)
+    # Torn paper edges
+    _torn_edge(draw, 2, W, seed=1)
+    _torn_edge(draw, H - 5, W, seed=2)
 
-    # Paper grain texture
-    img = _add_paper_texture(img, strength=5)
+    # Grain texture
+    img = _paper_texture(img, strength=5)
 
-    # Very slight blur for realism (removes pixel-perfect artificiality)
-    img = img.filter(ImageFilter.GaussianBlur(radius=0.4))
+    # Slight blur — removes synthetic sharpness
+    img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
 
     buf = io.BytesIO()
     img.save(buf, format="PNG", dpi=(200, 200))
