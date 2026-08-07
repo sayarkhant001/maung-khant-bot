@@ -25,8 +25,8 @@ CANVA_CATEGORY_TEXT = "🎨 *Canva Pro Plans*\nChoose a plan to unlock the full 
 PAYMENT_INSTRUCTIONS = """💳 *Payment Summary*
 ━━━━━━━━━━━━━━━━━━━
 📦  Plan      {plan_name}
-💰  Amount    {amount} MMK
-━━━━━━━━━━━━━━━━━━━
+💰  Amount    {amount}
+{email_line}━━━━━━━━━━━━━━━━━━━
 
 *Accepted Methods*
 {payment_methods}
@@ -115,8 +115,19 @@ User     @{username} (`{user_id}`)
 Product  {product}
 Plan     {plan_name}
 Amount   {amount} MMK
-Method   {method}
+Method   {method}{email_line}
 ━━━━━━━━━━━━━━━━━━━"""
+
+EMAIL_REQUEST = """📧 *Email Required*
+━━━━━━━━━━━━━━━━━━━
+Plan: *{plan_name}*
+
+This plan requires an email invite.
+Please send your email address:
+
+_Example: yourname@gmail.com_"""
+
+EMAIL_INVALID = "❌ That doesn't look like a valid email. Please try again:"
 
 ERROR_GENERIC = "⚠️ Something went wrong. Please try again or contact support."
 ERROR_RATE_LIMIT = "⏳ Please wait a moment before sending another request."

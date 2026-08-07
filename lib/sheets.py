@@ -71,7 +71,7 @@ SHEET_SCHEMAS = {
         "order_id", "user_id", "chat_id", "username", "product_type",
         "plan_name", "amount", "status", "payment_method",
         "screenshot_file_id", "created_at", "expires_at",
-        "admin_note", "verified_at", "subscription_id"
+        "admin_note", "verified_at", "subscription_id", "customer_email"
     ],
     "subscriptions": [
         "id", "user_id", "chat_id", "username", "product_type", "plan_name",
@@ -91,10 +91,12 @@ SHEET_SCHEMAS = {
         "price", "renew_price", "buying_price", "status", "sort_order"
     ],
     "zoom_plans": [
-        "id", "name", "days", "price", "renew_price", "buying_price", "status", "sort_order"
+        "id", "name", "days", "price", "renew_price", "buying_price",
+        "status", "sort_order", "requires_email"
     ],
     "canva_plans": [
-        "id", "name", "days", "price", "renew_price", "buying_price", "status", "sort_order"
+        "id", "name", "days", "price", "renew_price", "buying_price",
+        "status", "sort_order", "requires_email"
     ],
     "payment_methods": [
         "id", "name", "type", "account_info", "account_name", "note", "icon", "is_active"
@@ -277,7 +279,7 @@ def get_active_payment_methods() -> List[Dict]:
 
 def create_order(user_id: int, chat_id: int, username: str,
                  product_type: str, plan_name: str, amount: int,
-                 payment_method: str = "") -> Dict:
+                 payment_method: str = "", customer_email: str = "") -> Dict:
     ws = get_sheet("orders")
     headers = SHEET_SCHEMAS["orders"]
     order_id = "ORD-" + _gen_id()
@@ -302,6 +304,7 @@ def create_order(user_id: int, chat_id: int, username: str,
         "amount": amount,
         "status": "pending",
         "payment_method": payment_method,
+        "customer_email": customer_email or "",
         "created_at": now,
         "expires_at": expires_at,
     })
